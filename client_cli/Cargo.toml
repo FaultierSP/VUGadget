@@ -1,0 +1,13 @@
+[package]
+name = "vuclient-cli"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4.23"
+configparser = "3.0.2"
+sysinfo = "0.26.7"
+serial2 = "0.1.7"
+another_json_minimal = "0.0.2"
