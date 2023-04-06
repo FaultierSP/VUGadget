@@ -1,4 +1,4 @@
-use sysinfo::{CpuExt,System, SystemExt};
+use sysinfo::{CpuExt,System,SystemExt,NetworkExt};
 //use chrono::prelude::*;
 use configparser::ini::Ini;
 use std::error::Error;
@@ -11,6 +11,7 @@ fn main() -> Result<(),Box<dyn Error>> {
     config.load("target/debug/config.ini")?;
     let config_sends_per_second:u64=config.getuint("transfer", "sends per second").unwrap().unwrap();
     let config_serial_device:String=config.get("transfer", "serial device").unwrap();
+    let config_network_interface:String=config.get("transfer","network interface").unwrap();
     
     //Init serial port
     let port=SerialPort::open(config_serial_device, 9600)?;
@@ -20,7 +21,6 @@ fn main() -> Result<(),Box<dyn Error>> {
 
     loop {
         let mut json=Json::new();
-        //let dt: DateTime<Local>=Local::now();
 
         sys.refresh_cpu();
 
@@ -43,18 +43,28 @@ fn main() -> Result<(),Box<dyn Error>> {
         ))};
         json.add(mem_json);
 
+        sys.refresh_networks();
+
+        for (interface_name,data) in sys.networks() {
+            if interface_name==&config_network_interface {
+                let bytes_recieved_json=Json::OBJECT { name:String::from("br"),value:Box::new(Json::NUMBER((data.received()) as f64))};
+                json.add(bytes_recieved_json);
+                let bytes_transmitted_json=Json::OBJECT { name:String::from("bt"),value:Box::new(Json::NUMBER((data.transmitted()) as f64))};
+                json.add(bytes_transmitted_json);
+            }
+        }
+
         let string_json1=Json::OBJECT{name:String::from("s1"),value:Box::new(Json::STRING(
-            String::from("String 1")))};
+            String::from("String das ein bisschen Länger ist.")))};
         json.add(string_json1);
 
-        let string_json2=Json::OBJECT{name:String::from("s2"),value:Box::new(Json::STRING(
+        /*let string_json2=Json::OBJECT{name:String::from("s2"),value:Box::new(Json::STRING(
             String::from("String 2")))};
-        json.add(string_json2);
+        json.add(string_json2);*/
 
         //Write to serial
         port.write(json.print().as_bytes())?;
         println!("{:?}",json.print());
-        //println!("{:?}",String::from_utf8(port.read(&mut [0;256])));
 
         std::thread::sleep(std::time::Duration::from_millis(1000/config_sends_per_second));
     }
