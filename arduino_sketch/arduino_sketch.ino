@@ -148,11 +148,15 @@ void loop() {
         tft.drawFastHLine(14,60,100,BUGGY_WHITE);
       }
 
-      tft.fillRect(32,16,80,18,ST7735_BLACK);
-      drawText(35,28,1,BUGGY_WHITE,String(doc["bt"].as<int>()));
+      if(doc.containsKey("bt")) {
+        tft.fillRect(32,16,80,18,ST7735_BLACK);
+        drawText(35,28,1,BUGGY_WHITE,String(doc["bt"].as<int>()));
+      }
 
-      tft.fillRect(32,35,80,18,ST7735_BLACK);
-      drawText(35,48,1,BUGGY_WHITE,String(doc["br"].as<int>()));
+      if(doc.containsKey("br")) {
+        tft.fillRect(32,35,80,18,ST7735_BLACK);
+        drawText(35,48,1,BUGGY_WHITE,String(doc["br"].as<int>()));
+      }
 
       if(doc.containsKey("s1")) {
         tft.drawRect(14,62,100,83,ST7735_CYAN);
