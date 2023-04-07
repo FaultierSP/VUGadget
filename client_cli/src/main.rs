@@ -7,7 +7,7 @@ use another_json_minimal::*;
 fn main() -> Result<(),Box<dyn Error>> {
     //Get settings
     let mut config = Ini::new();
-    config.load("target/debug/config.ini")?;
+    config.load("config.ini")?;
     let config_sends_per_second:u64=config.getuint("transfer", "sends per second").unwrap().unwrap();
     let config_serial_device:String=config.get("transfer", "serial device").unwrap();
     let config_network_interface:String=config.get("transfer","network interface").unwrap();
