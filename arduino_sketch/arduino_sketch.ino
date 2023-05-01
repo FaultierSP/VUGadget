@@ -4,6 +4,7 @@
 #include <Adafruit_ST7735.h>
 #include <Fonts/FreeMono9pt7b.h>
 #include <ArduinoJson.h>
+#include <QList.h> //https://github.com/SloCompTech/QList
 
 //Pinouts
 #define TFT_CS 10
@@ -20,11 +21,17 @@ Adafruit_ST7735 tft=Adafruit_ST7735(TFT_CS,TFT_DC,TFT_RST);
 
 //Settings
 #define redthreshold 90
-#define timeWithoutDataToStandby 5000
+#define timeWithoutDataToStandby 3000 //in ms
+#define graphResolution 10
+#define graphRefreshRate 1 //times per second
+#define graphMinX 14 //ABSOLUTE VALUES!
+#define graphMinY 65
+#define graphMaxX 115
+#define graphMaxY 142
+#define graphWidth 101
+#define graphHeight 77
 
 //My screen is buggy...
-#define BUGGY_WHITE 0xffff
-#define BUGGY_BLACK 0x0000
 #define BUGGY_BLUE 0xf800
 #define BUGGY_GREEN 0x07e0
 #define BUGGY_RED 0x001f
@@ -32,8 +39,28 @@ Adafruit_ST7735 tft=Adafruit_ST7735(TFT_CS,TFT_DC,TFT_RST);
 
 //Global variables
 bool standingBy=false;
-int now=0;
-int lastSeenData=0;
+unsigned int now=0;
+unsigned int lastSeenData=0;
+QList<unsigned int> networkUploadData;
+QList<unsigned int> networkDownloadData;
+int previousUPX=0;
+int previousUPY=0;
+int currentUPX=0;
+int currentUPY=0;
+unsigned int previousDOWNX=0;
+unsigned int previousDOWNY=0;
+unsigned int currentDOWNX=0;
+unsigned int currentDOWNY=0;
+unsigned int currentUploadRate=0;
+unsigned int currentDownloadRate=0;
+unsigned long summedUploadRate=0;
+unsigned long summedDownloadRate=0;
+unsigned int calculatedUploadRate=0;
+unsigned int calculatedDownloadRate=0;
+unsigned int graphLoopCounter=0;
+unsigned int graphLastRender=0;
+unsigned long maximalNetworkValue=0;
+float columnWidth=graphWidth/(graphResolution-1);
 
 //Functions
 void controlVUassembly(unsigned short int vuID,unsigned short int value)
@@ -110,6 +137,28 @@ void standBy() {
   switchLEDsOff();
 }
 
+int translateXToScreen(int counter) {
+  int result=0;
+  
+  result=graphMinX+(columnWidth*counter);
+  return result;
+}
+
+int translateYToScreen(int raw) {
+  int result=0;
+  float floatGraphHeight=graphHeight; //yeah, it's kinda crutch, but the behaviour otherwise is weird. :/
+  float preResult=(floatGraphHeight/maximalNetworkValue)*raw;
+
+  if (preResult<0) {
+    result=graphMaxY;
+  }
+  else {
+    result=graphMaxY-preResult;
+  }
+
+  return result;
+}
+
 void setup() {
   pinMode(LED_BUILTIN,OUTPUT);
   pinMode(cpuledok,OUTPUT);
@@ -123,6 +172,11 @@ void setup() {
   tft.setFont(&FreeMono9pt7b);
 
   Serial.begin(9600);
+
+  for(int i=0;i<graphResolution;i++) {
+    networkDownloadData.push_back(0);
+    networkUploadData.push_back(0);
+  }
 
   standBy();
 }
@@ -142,35 +196,104 @@ void loop() {
 
       if(standingBy) {
         tft.fillScreen(ST7735_BLACK);
-        tft.drawRoundRect(7,7,115,145,4,BUGGY_WHITE);
-        tft.drawTriangle(14,30,22,17,30,30,BUGGY_WHITE);
-        tft.drawTriangle(14,37,30,37,22,50,BUGGY_WHITE);
-        tft.drawFastHLine(14,60,100,BUGGY_WHITE);
+        tft.drawRoundRect(7,7,115,145,4,ST7735_WHITE);
+        tft.drawTriangle(14,30,22,17,30,30,BUGGY_RED);
+        tft.drawTriangle(14,37,30,37,22,50,BUGGY_GREEN);
+        tft.drawFastHLine(14,60,101,ST7735_WHITE);
       }
 
       if(doc.containsKey("bt")) {
+        currentUploadRate=doc["bt"].as<int>();
+
         tft.fillRect(32,16,80,18,ST7735_BLACK);
-        drawText(35,28,1,BUGGY_WHITE,String(doc["bt"].as<int>()));
+        drawText(35,28,1,ST7735_WHITE,String(currentUploadRate));
+      }
+      else {
+        currentUploadRate=0;
       }
 
       if(doc.containsKey("br")) {
+        currentDownloadRate=doc["br"].as<int>();
+
         tft.fillRect(32,35,80,18,ST7735_BLACK);
-        drawText(35,48,1,BUGGY_WHITE,String(doc["br"].as<int>()));
+        drawText(35,48,1,ST7735_WHITE,String(currentDownloadRate));
+      }
+      else {
+        currentDownloadRate=0;
       }
 
-      if(doc.containsKey("s1")) {
-        tft.drawRect(14,62,100,83,ST7735_CYAN);
-        drawText(14,77,1,ST7735_WHITE,doc["s1"].as<String>());
+      //Graph rendering
+      if((now-graphLastRender)<=(1000/graphRefreshRate)) {
+        graphLoopCounter++;
+        summedUploadRate+=currentUploadRate;
+        summedDownloadRate+=currentDownloadRate;
       }
+      else {
+        tft.fillRect(14,65,graphWidth,graphHeight+1,ST7735_BLACK);
+
+        calculatedUploadRate=summedUploadRate/graphLoopCounter;
+        calculatedDownloadRate=summedDownloadRate/graphLoopCounter;
+
+        networkUploadData.pop_front();
+        networkUploadData.push_back(calculatedUploadRate);
+        networkDownloadData.pop_front();
+        networkDownloadData.push_back(calculatedDownloadRate);
+        
+        for(int i=0;i<networkUploadData.size();i++) {
+          if(networkUploadData[i]>maximalNetworkValue) {
+            maximalNetworkValue=networkUploadData[i];
+          }
+        }
+
+        for(int i=0;i<networkDownloadData.size();i++) {
+          if(networkDownloadData[i]>maximalNetworkValue) {
+            maximalNetworkValue=networkDownloadData[i];
+          }
+        }
+
+        if(networkDownloadData.size()==graphResolution && networkUploadData.size()==graphResolution) {
+          for(int graphCounter=0;graphCounter<graphResolution;graphCounter++) {
+            if (graphCounter==0) {
+              previousDOWNX=translateXToScreen(0);
+              previousDOWNY=translateYToScreen(networkDownloadData[0]);
+
+              previousUPX=translateXToScreen(0);
+              previousUPY=translateYToScreen(networkUploadData[0]);
+            }
+            else {
+              currentDOWNX=translateXToScreen(graphCounter);
+              currentDOWNY=translateYToScreen(networkDownloadData[graphCounter]);
+
+              currentUPX=translateXToScreen(graphCounter);
+              currentUPY=translateYToScreen(networkUploadData[graphCounter]);
+
+              tft.drawLine(previousUPX,previousUPY,currentUPX,currentUPY,BUGGY_RED);
+              tft.drawLine(previousDOWNX,previousDOWNY,currentDOWNX,currentDOWNY,BUGGY_GREEN);
+
+              previousDOWNX=currentDOWNX;
+              previousDOWNY=currentDOWNY;
+              previousUPX=currentUPX;
+              previousUPY=currentUPY;
+            }
+          }
+        }
+        else {
+          //Serial.println("Something nasty happened in the sizes of the graph loop. :(");
+        }
+
+        graphLastRender=millis();
+        graphLoopCounter=1;
+        summedUploadRate=currentUploadRate;
+        summedDownloadRate=currentDownloadRate;
+        maximalNetworkValue=0;
+      }
+      //eo graph rendering
 
       standingBy=false;
       lastSeenData=millis();
     }
-    else if (!standingBy) {
-      //standBy();
-    }
-  }
-  else if ((now-lastSeenData)>=timeWithoutDataToStandby && !standingBy) { //if(Serial.available())
+  } //if(Serial.available())
+  else if ((now-lastSeenData)>=timeWithoutDataToStandby && !standingBy) {
     standBy();
   }
 }
