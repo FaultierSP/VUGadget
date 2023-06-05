@@ -43,10 +43,10 @@ unsigned int now=0;
 unsigned int lastSeenData=0;
 QList<unsigned int> networkUploadData;
 QList<unsigned int> networkDownloadData;
-int previousUPX=0;
-int previousUPY=0;
-int currentUPX=0;
-int currentUPY=0;
+unsigned int previousUPX=0;
+unsigned int previousUPY=0;
+unsigned int currentUPX=0;
+unsigned int currentUPY=0;
 unsigned int previousDOWNX=0;
 unsigned int previousDOWNY=0;
 unsigned int currentDOWNX=0;
@@ -229,7 +229,7 @@ void loop() {
         summedDownloadRate+=currentDownloadRate;
       }
       else {
-        tft.fillRect(14,65,graphWidth,graphHeight+1,ST7735_BLACK);
+        tft.fillRect(14,64,graphWidth,graphHeight+2,ST7735_BLACK);
 
         calculatedUploadRate=summedUploadRate/graphLoopCounter;
         calculatedDownloadRate=summedDownloadRate/graphLoopCounter;
